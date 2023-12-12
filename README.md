@@ -33,7 +33,7 @@ I guess I will enable this if there is any activity
 <br />
 <div align="center">
   <a href="https://github.com/JavierNIS/Scripts">
-    <img src="images/bash_script_logo.png" alt="Logo" width="128" height="128">
+    <img src="images/bash_script_logo.png" width="128" height="128">
   </a>
 
 <h3 align="center">Scripts</h3>
@@ -99,7 +99,7 @@ What are the principles that I am following?:
 
 ### Built With
 
-* [![Next][Bash.sh]][Next-url]
+* <a href="https://www.gnu.org/software/bash/"><img src="images/terminal_bash.png" height="20" width="20"></a>
 
 >[!NOTE]
 >You can use any scripting language, I will use bash, but I plan on learning others as time goes on. Other scripting languages will be added as they get used.
@@ -150,6 +150,7 @@ This space will show you some examples on the usage of the scripts that will be 
   <a href="https://github.com/JavierNIS/Scripts">
     <img src="images/makefile_logo.png" alt="Logo" width="128" height="114">
   </a>
+</div>
 
 If you want to create multiple projects from the ground (targetn doesn't exist in the current path) use this command.
 
@@ -257,7 +258,6 @@ Scripts: [https://github.com/JavierNIS/Scripts](https://github.com/JavierNIS/Scr
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/linkedin_username
 [product-screenshot]: images/screenshot.png
-[bash.sh]: https://cdn3.brettterpstra.com/uploads/2015/02/terminal-longshadow.png
 [Vue-url]: https://vuejs.org/
 [Angular.io]: https://img.shields.io/badge/Angular-DD0031?style=for-the-badge&logo=angular&logoColor=white
 [Angular-url]: https://angular.io/
