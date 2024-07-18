@@ -18,12 +18,12 @@ CREATED=0
 INCLUDE="include"
 SOURCE="src"
 PATH_USED=$(pwd)
-ONEFILE=1
-LIBRARY=1
-FORCE=1
+ONEFILE=0
+LIBRARY=0
+FORCE=0
 SRCEXTENSION="cpp"
 INCEXTENSION="h"
-#Used for verification purposes only.
+#Used for verification purposes only. It was never used.
 declare -a USED_PARAMS
 
 #will print out a guide on how to use this script.
@@ -67,9 +67,9 @@ guide(){
 #Helps parse and verify the parameters, if any have been passed. 0 equals true, 1 equals false. FORMAT can be greater than one.
 verification(){
 	#Local variables used to catch parameters.
-	local FINISHED=1
+	local FINISHED=0
 	local FORMAT=0
-	local REPEATED=1
+	local REPEATED=0
 
 	#Let's see if the user wants some help, if thats the case, the program will show a guide.
 	if [ "$#" == 0 ]
@@ -81,14 +81,14 @@ verification(){
 	fi
 
 	#Here starts the loop.
-	while [ $FORMAT -eq 0 ] && [ "$FINISHED" -eq 1 ]
+	while [ $FORMAT -eq 0 ] && [ "$FINISHED" -eq 0 ]
 	do
 		#Saves the parameter before it is processed, that way, if the parameter is duplicated, then the script stops.
 		for param in "${USED_PARAMS[@]}"; do
-        	if [ "$param" == "$1" ]; then
-            	REPEATED=0
-				FORMAT=1
-        	fi
+      if [ "$param" == "$1" ]; then
+        REPEATED=1
+        FORMAT=1
+      fi
     	done
 		USED_PARAMS+=("$1")
 		#If it is not a duplicate, then it will check what paremeter it is.
@@ -217,7 +217,7 @@ verification(){
 			then
 				FORMAT=2
 			else
-				ONEFILE=0
+				ONEFILE=1
 				shift
 				USED=$((USED+1))
 			fi
@@ -227,8 +227,8 @@ verification(){
 			then
 				FORMAT=2
 			else	
-				LIBRARY=0
-				LIBRARYTYPE="dynamic"
+				LIBRARY=1
+				LIBRARYYPE="dynamic"
 				shift 
 				USED=$((USED+1))
 			fi
@@ -238,7 +238,7 @@ verification(){
 			then
 				FORMAT=2
 			else	
-				LIBRARY=0
+				LIBRARY=1
 				LIBRARYTYPE="static"
 				shift 
 				USED=$((USED+1))
@@ -249,7 +249,7 @@ verification(){
 			then
 				FORMAT=2
 			else
-				FORCE=0
+				FORCE=1
 				shift
 				USED=$((USED+1))
 			fi
@@ -259,12 +259,12 @@ verification(){
 			FORMAT=1
 		;;
 		*)
-			FINISHED=0
+			FINISHED=1
 		;;
 		esac
 	done
 	#Catches the error format and if any of the parameters have been repeated.
-	if [ $REPEATED -eq 0 ]
+	if [ $REPEATED -eq 1 ]
 	then
 		echo "You have repeating parameters."
 	fi
@@ -304,11 +304,9 @@ makefile_Maker(){
 	#If you are making an executable, then it will print out the target only
 	#If you are making a library, then it will have the .ar or the .so extension
 	echo "#Globals" >> $MKE
-	if [ $LIBRARY -eq 1 ]
-	then
+	if [ $LIBRARY -eq 0 ]; then
 		echo "NAME = $targets" >> $MKE
-	elif [ "$LIBRARYTYPE" == "static" ]
-	then
+	elif [ "$LIBRARYTYPE" == "static" ]; then
 		echo "NAME = $targets.ar" >> $MKE
 	else
 		echo "NAME = $targets.so" >> $MKE
@@ -316,8 +314,7 @@ makefile_Maker(){
 	#Scans the source files and the header files. ONLY ONE EXECUTABLE CAN BE MADE WITH THE BASIC MAKEFILE
 	echo 'SOURCES := $(wildcard $(SRC_DIR)*.'"$SRCEXTENSION)" >> $MKE
 	
-	if [ $ONEFILE -eq 1 ]
-	then
+	if [ $ONEFILE -eq 0 ]; then
 		echo 'HEADERS := $(wildcard $(HEADER_DIR)*.'"$INCEXTENSION)" >> $MKE
 	fi
 		
@@ -329,15 +326,12 @@ makefile_Maker(){
 	echo "obj:" >> $MKE
 	echo -e '\t@mkdir -p $(OBJ_DIR)' >> $MKE
 		
-	if [ $ONEFILE -eq 1 ]
-	then
-		if [ $LIBRARY -eq 1 ]
-		then
+	if [ $ONEFILE -eq 0 ]; then
+		if [ $LIBRARY -eq 0 ]; then
 			echo "#Link it all together" >> $MKE
 			echo '$(NAME): $(OBJECTS) $(HEADERS)' >> $MKE
 			echo -e '\tg++ $(CXXFLAGS) $(OBJECTS) -o $(NAME)' >> $MKE
-		elif [ "$LIBRARYTYPE" == "static" ]
-		then
+		elif [ "$LIBRARYTYPE" == "static" ]; then
 			echo "#Make a static library" >> $MKE
 			echo '$(NAME): $(OBJECTS) $(HEADERS)' >> $MKE
 			echo -e '\tar rcs $(NAME).ar $(OBJECTS)' >> $MKE
@@ -351,13 +345,11 @@ makefile_Maker(){
 		echo '$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp $(HEADERS)' >> $MKE
 		echo -e '\tg++ -c $(CXXFLAGS) -I$(HEADER_DIR) -o $@ $<' >> $MKE
 	else
-		if [ $LIBRARY -eq 1 ]
-		then
+		if [ $LIBRARY -eq 0 ]; then
 			echo "#Link the single file" >> $MKE
 			echo '$(NAME): $(OBJECTS)' >> $MKE
 			echo -e '\tg++ $(CXXFLAGS) $(OBJECTS) -o $(NAME)' >> $MKE
-		elif [ $LIBRARYTYPE == "static" ]
-		then
+		elif [ "$LIBRARYTYPE" == "static" ]; then
 			echo "#Make a static library" >> $MKE
 			echo '$(NAME): $(OBJECTS)' >> $MKE
 			echo -e '\tar rcs $(NAME).ar $(OBJECTS)' >> $MKE
@@ -390,7 +382,7 @@ do
 	#each target will be treated as an independet project
 	PROJECT_DIR="$PATH_USED/$targets"
 	#if the path above exists, then it will starts making the makefile, otherwise, it will be marked as missed if the parameter --force was not specified
-	if [ ! -d "$PROJECT_DIR" ] && [ $FORCE -eq 0 ]
+	if [ ! -d "$PROJECT_DIR" ] && [ $FORCE -eq 1 ]
 	then
 		mkdir "$PROJECT_DIR"
 		CREATED=$((CREATED+1))
@@ -426,14 +418,14 @@ do
 			mkdir "$PROJECT_DIR/$SOURCE"
 			echo "Source directory created"
 		fi
-		if [ ! -d "$PROJECT_DIR/$INCLUDE" ] && [ $ONEFILE -eq 1 ]
+		if [ ! -d "$PROJECT_DIR/$INCLUDE" ] && [ $ONEFILE -eq 0 ]
 		then
 			mkdir "$PROJECT_DIR/$INCLUDE"
 			echo "Include directory created"
 		fi
 		#starts writing the makefile, following the parameters given (HAS TO BE UPTDATED TO SUPPORT THE MOST RECENT ADDITIONS)
 		makefile_Maker
-	elif [ $FORCE -eq 1 ]
+	elif [ $FORCE -eq 0 ]
 	then
 	#as said before, if the path couldn't be found and the --force option wasn't specified, then, the target will be considered missed
 		MISSED=$((MISSED+1))
@@ -443,7 +435,7 @@ do
 	PROGRESS=$(( PROGRESS + 100/NUM_ARGS ))
 	echo "Progress: $PROGRESS%"
 done
-if [ $FORCE -eq 1 ]
+if [ $FORCE -eq 0 ]
 then
 	echo -e "UPDATED=$UPDATED\tCOMPLETED=$COMPLETED\tMISSED=$MISSED"
 else
