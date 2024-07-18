@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# General variables: You shouldn't edit this parameters too often
+readonly _USER="mcuser"
+readonly _SPATH="/srv/forge-server"
+readonly _SERVER="forge-1.12.2-14.23.5.2859.jar"
+readonly _LOCK="lock"
+
+# Configuration variables: You may edit these according to your needs
+# Memory reserver by the virtual machine, the max and min are the same to avoid virtual heap
+MALLOC="-Xms12G -Xmx12G"
+# Optimization of heap: (yeah I am not translating)
+# 	UseG1GC: Usar la opción G1 del Garbage Collector (GC). Funciona mejor para sistemas de gran memoria.
+# 	UnlockExperimentalVMOptions: Permite el uso de la opción G1 para GC y G1NewSizePercent.
+# 	MaxGCPauseMillis: Tiempo de pausa máximo por procesos de recolección de basura (liberación de memoria).
+# 	DisableExplicitGC: Ignora System.gc(), evitando interferir con el comportamiento del GC.
+# 	AlwaysPreTouch: Precarga la información que pueda ser necesaria.
+#	TargetSurvivorRatio: El porcentaje de uso objetivo del GC para las secciones supervivientes.
+#	G1NewSizePercent: El porcentaje total que ocupa la generación joven.
+#	G1MaxNewSizePercent: Tamaño máximo que podrá ocupar la generación joven.
+#	UseLargePagesInMetaspace: Optimización de la caché de la CPU al usar páginas de mayor tamaño.
+ARGS="-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:TargetSurvivorRatio=90 -XX:G1NewSizePercent=50 -XX:G1MaxNewSizePercent=80 -XX:+UseLargePagesInMetaspace"
+file="$_SPATH/$_SERVER"
+lock="$_SPATH/$_LOCK"
+option="x"
+
+# Unlock the process so another one can be made
+unlock() {
+	rm -f "${lock}"
+}
+trap unlock EXIT
+
+# Check if this process already exists
+if [ -e "${lock}" ]; then
+	echo "Una instancia de este script está en ejecución, abortando..." # Translation: One instance of the script is already in execution, aborting...
+	exit 1
+fi
+# If it isn't duplicated, create a lock
+touch "${lock}"
+
+echo "Lock creado." # T: Lock created
+
+# Check the user, change it to the user you want to use or comment this part if you don't want any restrictions
+if [ "$(whoami)" != "${_USER}" ]; then
+	echo "Usuario no permitido, de momento solo ${_USER} es capaz de iniciar el servidor" # T: User not allowed, only ${_USER} is capable of starting the server
+	exit 1
+fi
+
+# Change to the working path
+cd "$_SPATH"
+
+echo "Directory cambiado a $(pwd)" # Directory changed to 
+
+# Checking for the server
+if [ ! -f "${file}" ]; then
+	echo "No se ha encontrado el servidor en la ruta correcta, información de error:" # Server not found, debug info:
+	echo "Path al servidor: ${_SPATH}"
+	echo "Version del servidor: ${_SERVER}"
+	echo "Path completo: ${file}"
+	exit 1
+fi
+
+echo "Server encontrado" # Server found
+
+# What do you want to do
+read -p "¿Quieres que se ejecute en una sesión de tmux? [y/n] " option
+while [ "$option" != "y" ] && [ "$option" != "n" ]
+do
+	read -p "Opcion incorrecta [y/n] " option #Cheeky bastard
+done
+
+# Server start according to the option chosen
+if [ "$option" == "y" ]; then
+	sudo tmux new-session -d -s minecraft 'java ${MALLOC} ${ARGS} -jar ${file} nogui' && \
+		echo "Servidor iniciado con éxito" # Server started successfully. That's a lie. This doesn't work
+else
+	java ${MALLOC} ${ARGS} -jar ${file} nogui # This works!
+fi
