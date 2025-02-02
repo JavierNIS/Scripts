@@ -1,11 +1,48 @@
 #!/bin/bash
 
 # General variables: You shouldn't edit this parameters too often. If this is 
-# your first time using it, then it would be a great idea to check them
-readonly _USER="mcuser"
-readonly _SPATH="/home/$_USER/mcserver"
-readonly _SERVER="forge-1.12.2-14.23.5.2859.jar"
-readonly _LOCK="lock"
+# your first time using it, then it would be a great idea to check them.
+# For security reasons, don't stick with the default
+readonly MC_USER="mcuser"
+readonly MC_SPATH="/srv/forge-server"
+readonly MC_SERVER="forge-1.12.2-14.23.5.2859.jar" #Assuming for modded servers in version 1.12.2
+readonly MC_LOCK="lock" #Just the name of the server_file that will act as a lock
+readonly SCRIPT_LANG="es" #es: Spanish
+
+translate() {
+  case "$SCRIPT_LANG" in
+    es)
+      case "$1" in
+        "lock_already_exists") echo "Una instancia de este script está en ejecución, abortando..." ;;
+        "lock_created") echo "Bloqueo creado." ;;
+        "user_not_allowed") echo "Usuario no permitido. Solo $MC_USER puede iniciar el servidor." ;;
+        "directory_changed") echo "Directorio cambiado a $(pwd)" ;;
+        "server_found") echo "Servidor encontrado." ;;
+        "no_java") echo "No se encontró una instalación de Java. Por favor, instale Java antes de continuar." ;;
+        "java_incompatible") echo "La versión de Java instalada ($java_major) es menor que la requerida ($required_java)." ;;
+        "systemd_created") echo "Servicio systemd creado." ;;
+        "choose_action") echo "Elige una acción:" ;;
+        "invalid_choice") echo "Opción inválida. Saliendo." ;;
+        *) echo "$1" ;;
+      esac
+      ;;
+    *)
+      case "$1" in
+        "lock_already_exists") echo "One instance of the script is already running, aborting..." ;;
+        "lock_created") echo "Lock created." ;;
+        "user_not_allowed") echo "User not allowed. Only $MC_USER can start the server." ;;
+        "directory_changed") echo "Directory changed to $(pwd)" ;;
+        "server_found") echo "Server found." ;;
+        "no_java") echo "No Java installation found. Please install Java before continuing." ;;
+        "java_incompatible") echo "Installed Java version ($java_major) is lower than required ($required_java)." ;;
+        "systemd_created") echo "Systemd service created." ;;
+        "choose_action") echo "Choose an action:" ;;
+        "invalid_choice") echo "Invalid choice. Exiting." ;;
+        *) echo "$1" ;;
+      esac
+      ;;
+  esac
+}
 
 # Configuration variables: You may edit these according to your needs
 # Memory reserver by the virtual machine, the max and min are the same to avoid virtual heap
@@ -21,48 +58,47 @@ MALLOC="-Xms12G -Xmx12G"
 #	G1MaxNewSizePercent: Max size that the young generation can take. 
 #	UseLargePagesInMetaspace: Cache CPU optimization using pages of greater size.
 ARGS="-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:TargetSurvivorRatio=90 -XX:G1NewSizePercent=50 -XX:G1MaxNewSizePercent=80 -XX:+UseLargePagesInMetaspace"
-file="$_SPATH/$_SERVER"
-lock="$_SPATH/$_LOCK"
-option="x"
+server_file="$MC_SPATH/$MC_SERVER"
+lock="$MC_SPATH/$MC_LOCK"
 
-# Unlock the process so another one can be made
+# once the process is finished, the lock can be freed
 unlock() {
-	rm -f "${lock}"
+	rm -f "$lock"
 }
 trap unlock EXIT
 
 # Check if this process already exists
-if [ -e "${lock}" ]; then
-	echo "Una instancia de este script está en ejecución, abortando..." # Translation: One instance of the script is already in execution, aborting...
+if [ -e "$lock" ]; then
+  translate "lock_already_exists"
 	exit 1
 fi
 # If it isn't duplicated, create a lock
-touch "${lock}"
+touch "$lock"
 
-echo "Lock creado." # T: Lock created
+translate "lock_created"
 
 # Check the user, change it to the user you want to use or comment this part if you don't want any restrictions
-if [ "$(whoami)" != "${_USER}" ]; then
-	echo "Usuario no permitido, de momento solo ${_USER} es capaz de iniciar el servidor" # T: User not allowed, only ${_USER} is capable of starting the server
+if [ "$(whoami)" != "$MC_USER" ]; then
+  translate "user_not_allowed"
 	exit 1
 fi
 
 # Change to the working path
-cd "$_SPATH"
+cd "$MC_SPATH"
 
-echo "Directory cambiado a $(pwd)" # Directory changed to 
+translate "directory_changed"
 
 # Checking for the server
-if [ ! -f "${file}" ]; then
+if [ ! -f "$server_file" ]; then
 	echo "No se ha encontrado el servidor en la ruta correcta, información de error:" # Server not found, debug info:
-	echo "Path al servidor: ${_SPATH}"
-	echo "Version del servidor: ${_SERVER}"
-	echo "Path completo: ${file}"
+	echo "Path al servidor: $MC_SPATH"
+	echo "Version del servidor: $MC_SERVER"
+	echo "Path completo: $server_file"
 	exit 1
 fi
 
 echo "Server encontrado" # Server found
 
 # What do you want to do
-# TODO: Change it so it doesn't use tmux, instead, it should make sure that
+# TODO: It should make sure that
 # that a .service exists
