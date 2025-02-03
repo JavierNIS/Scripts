@@ -85,12 +85,12 @@ I guess I will enable this if there is any activity
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-The idea behind this repository is to publish scripts I have been making and uptdating. Some scripts are made out of curiosity, I just think about a pontetial use for a bash script and then I try to implement it. Other scripts are made out of necessity, sometimes, I want to make a process automatic and I make a simple script, said script then gets refactored and I try to make it usable for more situations. At the end, I have a somewhat big script that I want to share with the world, in case someone finds it useful!
+The idea behind this repository is to publish scripts I have been making and uptdating. Some scripts are made out of curiosity, I just think about a potential use for a bash script and then I try to implement it. Other scripts are made out of necessity, sometimes, I want to make a process automatic and I make a simple script, said script then gets refactored and I try to make it usable for more situations. At the end, I have a some scripts that I want to share with the world, in case someone finds them useful!
 
 What are the principles that I am following?:
 * Modularity: I will try to break my projects into smaller functions, right now there isn't a lot to work with, but when I find it useful, I will try to combine common functions into libraries.
-* Portability: I will try to keep the number of files needed for the usage of a script as small as possible, the best scenario will be to use only one or two files.
-* Readability: Documentation should be something really important, I will try to add as many explanations as I redeem necessary. This is also implied for the coding, I am not a bash expert, but I will try to make code as readable as possible.
+* Portability: I will try to keep the number of files needed for the usage of a script as small as possible, the best scenario will be to use only one or two files. Also, I will try to make POSIX compliant scripts.
+* Readability: Documentation is an important part of the scripts, I will try to add as many explanations as I redeem necessary. This is also implied for the coding, I am not a script expert, but I will try to make code as readable as possible.
 * INCLUDE YOUR OWN: This is a space to share your own bash code, if you have something that you find interesting then feel free to include it, also, feel free to criticise my work and propose ways to improve it, this is a place that promotes learning and improvement.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -108,6 +108,9 @@ What are the principles that I am following?:
 <!-- A humble start -->
 + Bash:
   * Making_Makefiles
+  * startServer
+  * mdrive
+  * wifi_connect
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -181,12 +184,10 @@ You can combine most commands, for more help, use the the command
 
 ### Making_Makefiles
 
-- [ ] {IMMEDIATE} Fix potential bugs.
-- [ ] Make it an option to make different target types within the same command.
-- [ ] Make a command so you can handle multiple executables within the same target.
-- [ ] Add support for other languages.
-    - [ ] Support for pure C projects.
-- [ ] Add other options like cmake or json tasks.
+- [x] {IMMEDIATE} Fix potential bugs.
+- [ ] Migrate to python. 
+
+This script is really big, adding more functionality would make it confusing.
 
 See the [open issues](https://github.com/JavierNIS/Scripts/issues) for a full list of proposed features (and known issues).
 
