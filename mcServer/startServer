@@ -7,7 +7,11 @@ readonly MC_USER="mcuser"
 readonly MC_SPATH="/srv/forge-server"
 readonly MC_SERVER="forge-1.12.2-14.23.5.2859.jar" #Assuming for modded servers in version 1.12.2
 readonly MC_LOCK="lock" #Just the name of the server_file that will act as a lock
+readonly SERVICE_NAME="minecraftServer"
 readonly SCRIPT_LANG="es" #es: Spanish
+
+# This would cause problems if the version number has more than 3 digits
+function ver { printf "%03d%03d%03d%03d" $(echo "$1" | tr '.' ' '); }
 
 translate() {
   case "$SCRIPT_LANG" in
@@ -19,11 +23,10 @@ translate() {
         "directory_changed") echo "Directorio cambiado a $(pwd)" ;;
         "server_found") echo "Servidor encontrado." ;;
         "no_java") echo "No se encontró una instalación de Java. Por favor, instale Java antes de continuar." ;;
-        "java_incompatible") echo "La versión de Java instalada ($java_major) es menor que la requerida ($required_java)." ;;
+        "java_incompatible") echo "La versión de Java instalada ($java_version_available) es menor que la requerida ($required_java_version)." ;;
         "systemd_created") echo "Servicio systemd creado." ;;
-        "choose_action") echo "Elige una acción:" ;;
-        "invalid_choice") echo "Opción inválida. Saliendo." ;;
-        *) echo "$1" ;;
+#        "choose_action") echo "Elige una acción:" ;;
+#        "invalid_choice") echo "Opción inválida. Saliendo." ;;
       esac
       ;;
     *)
@@ -32,13 +35,13 @@ translate() {
         "lock_created") echo "Lock created." ;;
         "user_not_allowed") echo "User not allowed. Only $MC_USER can start the server." ;;
         "directory_changed") echo "Directory changed to $(pwd)" ;;
+        "server_not_found") echo "Servidor encontrado." ;;
         "server_found") echo "Server found." ;;
         "no_java") echo "No Java installation found. Please install Java before continuing." ;;
-        "java_incompatible") echo "Installed Java version ($java_major) is lower than required ($required_java)." ;;
+        "java_incompatible") echo "Installed Java version ($java_version_available) is lower than required ($required_java_version)." ;;
         "systemd_created") echo "Systemd service created." ;;
-        "choose_action") echo "Choose an action:" ;;
-        "invalid_choice") echo "Invalid choice. Exiting." ;;
-        *) echo "$1" ;;
+#        "choose_action") echo "Choose an action:" ;;
+#        "invalid_choice") echo "Invalid choice. Exiting." ;;
       esac
       ;;
   esac
@@ -90,15 +93,54 @@ translate "directory_changed"
 
 # Checking for the server
 if [ ! -f "$server_file" ]; then
-	echo "No se ha encontrado el servidor en la ruta correcta, información de error:" # Server not found, debug info:
-	echo "Path al servidor: $MC_SPATH"
-	echo "Version del servidor: $MC_SERVER"
-	echo "Path completo: $server_file"
 	exit 1
 fi
 
-echo "Server encontrado" # Server found
+translate "server_found"
 
 # What do you want to do
 # TODO: It should make sure that
 # that a .service exists
+
+if ! command -v > /dev/null
+then
+  translate "no_java"
+  exit 1
+fi
+
+java_version_available=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}')
+java_server_version=$(echo "$MC_SERVER" | awk -F '-' '{print $2}')
+java_server_version=$(ver $java_server_version)
+
+if [ "$java_server_version" -le "$(ver "1.16.5")" ]; then
+  required_java_version=8
+elif [ "$java_server_version" -le "$(ver "1.17.1")" ]; then
+  required_java_version=16
+else 
+  required_java_version=17
+fi
+
+if [ "$required_java_version" -lt "$(awk -F '.' '{print $2}')" ]; then
+  translate "java_incompatible"
+  exit 1
+fi
+
+SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
+if [ -f "$SERVICE_FILE" ]; then
+  cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
+  [Unit]
+  Description=Minecraft Server
+  After=network.target
+
+  [Service]
+  User=$MC_USER
+  WorkingDirectory=$MC_SPATH
+  ExecStart=/usr/bin/java $MALLOC $ARGS -jar $MC_SERVER nogui
+  Restart=on-failure
+
+  [Install]
+  WantedBy=multi-user.target
+EOF
+  sudo systemctl daemon-reload
+  translate "systemd_created"
+fi
