@@ -98,10 +98,7 @@ fi
 
 translate "server_found"
 
-# What do you want to do
-# TODO: It should make sure that
-# that a .service exists
-
+#checks if there is a java version available, and if it is good enough
 if ! command -v > /dev/null
 then
   translate "no_java"
@@ -144,3 +141,6 @@ EOF
   sudo systemctl daemon-reload
   translate "systemd_created"
 fi
+
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
