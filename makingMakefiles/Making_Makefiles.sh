@@ -11,21 +11,33 @@ set -euo pipefail
 IFS=$'\n\t'
 
 #Variables related to the state of processing the data.
-MISSED_TARGETS=0
-COMPLETED_TARGETS=0
-UPDATED_TARGETS=0
-PROGRESS=0
+#CREATED_TARGETS=0
 PARAMS_USED=0
-CREATED_TARGETS=0
+declare -a TARGET_FILES=()
+declare -A TARGET_SEEN=()
+#The associative array will store how many libraries, onefiles and such will be built
+#example: HOW_TARGETS_ARE_BUILT["static"] = number_of_static_libraries
+declare -A HOW_MANY_TARGETS_ARE_BUILT=()
+#This array will indicate the order in which each target is treated, 
+#It saves if first the first targets are libraries, onefiles and such will be built
+#example: ORDER_IN_WHICH_TO_BUILD[0] = "static", so the first n targets are static libraries 
+declare -a ORDER_IN_WHICH_TO_BUILD=()
+
 #Variables and their default values, they can be changed later.
 INCLUDE_DIR="include"
 SOURCE_DIR="src"
 PATH_USED=$(pwd)
-ONEFILE_TARGET=0
-MAKING_LIBRARY=0
+COMP="g++"
+COMP_FLAGS="-std=c++17 -Wall -g -Ofast"
+
+#ONEFILE_TARGET=0
+#MAKING_LIBRARY=0
 FORCE_PROJECT_CREATION=0
-SRCEXTENSION="cpp"
-INCEXTENSION="h"
+SRC_EXTENSION="cpp"
+INC_EXTENSION="h"
+
+#At first the makefile assumes only binaries will be made
+BUILDING_ONLY_BINARIES=1
 
 
 ##########################################################################################################################
@@ -51,16 +63,21 @@ guide(){
 	printf "\n\t-SX <source_extension>\n"
 	printf "Uses an specific extension for the source files. This allows for the usage of other file extensions like: tpp, cc...\n"
 	printf "Formating: You just need to name the extension\n"
-	printf "\n\t--single\n"
-	printf "Specifies that there will be a single cpp file. It is assumed that you will only have a source file, so no header directory\n"
-	printf "will be made. You can still use the -I, -IX parameters, but it won't have any effects.\n"
-	printf "\n\t--library=dynamic|static"
-	printf "It will prepare the makefile for library making. You can use this option with any other, even --single.\n"
-	printf "Defaults to static library.\n"
+	printf "\n\t--static <number_of_static_libraries>\n"
+	printf "It will prepare the makefile for library making. You can use this option along with --dynamic.\n"
+  printf "The remaining targets will be turned into dynamic libraries or binaries (depending on order of parameters, and number of remaining targets)\n"
+	printf "\n\t--dynamic <number_of_dynamic_libraries>\n"
+	printf "It will prepare the makefile for library making. You can use this option along with --static.\n"
+  printf "The remaining targets will be turned into static libraries or binaries (depending on order of parameters, and number of remaining targets)\n"
+  printf "\n\t-C | --compiler <compiler>\n"
+	printf "Allows you to choose which compiler to use for your project, default is: g++.\n"
+  printf "\n\t-CF | --compiler-flags <compiler>\n"
+	printf "Allows you to choose what flags to use for your project, default is: -std=c++17 -Wall -g -Ofast.\n"
+	printf "It is expected that you write the compiler flags inside \"\".\n"
 	printf "\n\t--force\n"
 	printf "It will force the creation of the project if it couldn't be found in the given path, if that path doesn't exist then the targets will be missed still\n"
 	printf "\nNotes:\n\n"
-	printf ">The script doesn't care the order in which you use the parameters."\n 
+	printf ">The script doesn't care the order in which you use the parameters. Except for --static and --dynamic"\n 
 	printf ">You might use -IS <include_dir> <source_dir> and -ISX <include_extension> <source_extension> instead of -I -S and -IX -SX.\n"
 	printf ">The path you use will define were your targets are, in other words, if /this/is/your/path/\n"
 	printf "then, your targets will be interpreted as: /this/is/your/path/project/source_dir/target1 /this/is/your/path/project/source_dir/target2 ... /this/is/your/path/project/source_dir/targetn.\n"
@@ -90,6 +107,9 @@ verify_parameters(){
 	#Here starts the loop.
 	while [ $FORMAT_IS_CORRECT -eq 0 ] && [ "$FINISHED" -eq 0 ]
 	do
+    #the user didn't specify any target but there are 0 parameters to parse left
+    if [ "$#" -eq 0 ]; then FINISHED=1; break; fi
+
 		#Saves the parameter before it is processed, that way, if the parameter is duplicated, then the script stops.
 		for param in "${USED_PARAMS[@]}"; do
       if [ "$param" == "$1" ]; then
@@ -120,7 +140,7 @@ verify_parameters(){
 		#As a note, FORMAT_IS_CORRECT will take the value 3 if there are no targets.
 		case "$1" in
 		-P|--path)
-			if [ "$#" -le 2 ]
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ ! -d "$2" ]
@@ -134,7 +154,7 @@ verify_parameters(){
 			fi
 		;;
 		-S|--source)
-			if [ "$#" -le 2 ]
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ]
@@ -148,7 +168,7 @@ verify_parameters(){
 			fi
 		;;
 		-I|--include)
-			if [ "$#" -le 2 ]
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ]
@@ -162,7 +182,7 @@ verify_parameters(){
 			fi
 		;;
 		-IS)
-			if [ "$#" -le 3 ]
+			if [ "$#" -lt 3 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ] || [ "$3" == -* ]
@@ -177,7 +197,7 @@ verify_parameters(){
 			fi
 		;;
 		-IX)
-			if [ "$#" -le 2 ]
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ]
@@ -185,13 +205,13 @@ verify_parameters(){
 				printf "Error. You didn't introduce the value of the parameter.\n"
 				FORMAT_IS_CORRECT=1
 			else
-				INCEXTENSION="$2"
+				INC_EXTENSION="$2"
 				shift 2
 				PARAMS_USED=$((PARAMS_USED+2))
 			fi
 		;;
 		-SX)
-			if [ "$#" -le 2 ]
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ]
@@ -199,13 +219,13 @@ verify_parameters(){
 				printf "Error. You didn't introduce the value of the parameter.\n"
 				FORMAT_IS_CORRECT=1
 			else
-				SRCEXTENSION="$2"
+				SRC_EXTENSION="$2"
 				shift 2
 				PARAMS_USED=$((PARAMS_USED+2))
 			fi
 		;;
 		-ISX)
-			if [ "$#" -le 3 ]
+			if [ "$#" -lt 3 ]
 			then
 				FORMAT_IS_CORRECT=2
 			elif [ "$2" == -* ] || [ "$3" == -* ]
@@ -213,46 +233,68 @@ verify_parameters(){
 				printf "Error. You didn't introduce the value of the parameter.\n"
 				FORMAT_IS_CORRECT=1
 			else
-				INCEXTENSION="$2"
-				SRCEXTENSION="$3"
+				INC_EXTENSION="$2"
+				SRC_EXTENSION="$3"
 				shift 3
 				PARAMS_USED=$((PARAMS_USED+3))
 			fi
 		;;
-		--single)
-			if [ "$#" -le 1 ]
+		--dynamic)
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
-			else
-				ONEFILE_TARGET=1
-				shift
-				PARAMS_USED=$((PARAMS_USED+1))
+			elif [ "$2" == -* ]
+			then
+				printf "Error. You didn't introduce the value of the parameter.\n"
+				FORMAT_IS_CORRECT=1
+			else 
+        ORDER_IN_WHICH_TO_BUILD+="dynamic"
+        HOW_TARGETS_ARE_BUILD["dynamic"]=$2
+				shift 2 
+				PARAMS_USED=$((PARAMS_USED+2))
 			fi
 		;;
-		--library=dynamic)
-			if [ "$#" -le 1 ]
+		--static)
+			if [ "$#" -lt 2 ]
 			then
 				FORMAT_IS_CORRECT=2
+			elif [ "$2" == -* ]
+			then
+				printf "Error. You didn't introduce the value of the parameter.\n"
+				FORMAT_IS_CORRECT=1
 			else	
-				MAKING_LIBRARY=1
-				LIBRARY_TYPE="dynamic"
-				shift 
-				PARAMS_USED=$((PARAMS_USED+1))
+        ORDER_IN_WHICH_TO_BUILD+="static"
+        HOW_TARGETS_ARE_BUILD["static"]=$2
+				shift 2
+				PARAMS_USED=$((PARAMS_USED+2))
 			fi
 		;;
-		--library=static)
-			if [ "$#" -le 1 ]
-			then
-				FORMAT_IS_CORRECT=2
-			else	
-				MAKING_LIBRARY=1
-				LIBRARY_TYPE="static"
-				shift 
-				PARAMS_USED=$((PARAMS_USED+1))
-			fi
-		;;
+    -C|--compiler)
+      if [ "$#" -lt 2 ]; then
+        FORMAT_IS_CORRECT=2
+      elif [ "$2" == -* ]; then 
+				printf "Error. You didn't introduce the value of the parameter.\n"
+				FORMAT_IS_CORRECT=1
+			else 
+        COMP="$2"
+        shift 2
+        PARAMS_USED=$((PARAMS_USED+2))
+      fi
+    ;;
+    -CF|--compiler-flags)
+      if [ "$#" -lt 2 ]; then
+        FORMAT_IS_CORRECT=2
+      elif [ "$2" == -* ]; then 
+				printf "Error. You didn't introduce the value of the parameter.\n"
+				FORMAT_IS_CORRECT=1
+			else 
+        COMP_FLAGS="$2"
+        shift 2
+        PARAMS_USED=$((PARAMS_USED+2))
+      fi
+    ;;
 		--force)
-			if [ "$#" -le 1 ]
+			if [ "$#" -lt 1 ]
 			then
 				FORMAT_IS_CORRECT=2
 			else
@@ -286,16 +328,145 @@ verify_parameters(){
 		printf "Example of usage: ./NameOfTheProgram --force -P /example/path -S source mytarget1 mytarget2\n\n"
 		exit 1;
 	fi
-	NUM_ARGS="$#"
+  ORDER_IN_WHICH_TO_BUILD+="binary"
 }
 ##########################################################################################################################
 
+#BUG: Will say that a file has a main if a string has main()
+file_has_main(){
+  awk '
+    BEGIN { in_block = 0; found = 0 }
+    {
+      line = $0
+      # process until there is nothing to change
+      while (1) {
+        if (in_block) {
+          # look for end of comment
+          e = index(line, "*/")
+          if (e == 0) { line = ""; break }     # entire line inside block comment
+          line = substr(line, e+2)             # remove up to and including "*/"
+          in_block = 0
+          next
+        } else {
+          s = index(line, "/*")
+          t = index(line, "//")
+          if (s == 0 && t == 0) break          # nothing to strip on this line
+          if (t != 0 && (s == 0 || t < s)) {   # line comment earlier than block start
+            line = substr(line, 1, t-1)
+            break
+          }
+          if (s != 0) {
+            # remove block from s onward; check if the closing */ is on same line
+            prefix = (s>1) ? substr(line, 1, s-1) : ""
+            rest = substr(line, s+2)
+            e = index(rest, "*/")
+            if (e == 0) {
+              line = prefix
+              in_block = 1
+              break
+            } else {
+              # remove the block and continue scanning the remainder
+              line = prefix substr(rest, e+2)
+            }
+          }
+        }
+      }
+      # after comment-stripping, test for main with a conservative boundary:
+      # (^|[^[:alnum:]_])main[[:space:]]*(
+      if (line ~ /(^|[^[:alnum:]_])main[[:space:]]*\(/) {
+        found = 1
+        exit
+      } 
+  }
+  END {
+    exit (!found)
+  }
+  ' "$1" 
+
+}
+
+##########################################################################################################################
+find_sources_headers(){
+  if [ ! -d "$SOURCE_DIR" ]; then
+    printf "[WARN] Source directory $PROJECT_DIR$SOURCE_DIR does not exist.\n"
+    exit 1
+  fi
+
+  mapfile -d '' -t SOURCE_FILES < <(find "./$SOURCE_DIR" -type f -name "*.${SRC_EXTENSION}" -print0)
+  if [ ${#SOURCE_FILES[@]} -eq 0 ]; then
+    printf "[WARN] No source files found under %s with extension %s\n" "$SOURCE_DIR" "$SRC_EXTENSION"
+  fi
+
+  mapfile -d '' -t HEADER_FILES < <(find "./$INCLUDE_DIR" -type f -name "*.${INC_EXTENSION}" -print0)
+  if [ ${#HEADER_FILES[@]} -eq 0 ]; then
+    printf "[WARN] No header files found under %s with extension %s\n" "$INCLUDE_DIR" "$INC_EXTENSION"
+  fi
+  
+  for i in "${!SOURCE_FILES[@]}"; do 
+    SOURCE_FILES[$i]=$(basename "${SOURCE_FILES[$i]}")
+  done
+  for i in "${!HEADER_FILES[@]}"; do 
+    HEADER_FILES[$i]=$(basename "${HEADER_FILES[$i]}")
+  done
+}
+
+##########################################################################################################################
+
+find_source_by_name(){
+  if [ "$1" == "*.$SRC_EXTENSION" ]; then
+    for file in "${SOURCE_FILES[@]}"; do 
+      if [ "$file" == "$1" ]; then
+        printf "$file\n"
+        return 0
+      fi
+    done
+  else 
+    for file in "${SOURCE_FILES[@]}"; do 
+      if [ "${file%.*}" == "$1" ]; then
+        printf "$file\n"
+        return 0
+      fi 
+    done
+  fi
+  return 1
+}
+
+##########################################################################################################################
+
+add_proposed_targets(){
+  for target in "$@"; do
+    if src_file="$(find_source_by_name $target)"; then
+      if file_has_main "./$SOURCE_DIR/$src_file"; then
+        if [ -z "${TARGET_SEEN[$src_file]:-}" ]; then
+          TARGET_FILES+=("$src_file")
+          TARGET_SEEN["$src_file"]=1
+        fi
+      else 
+        printf "[ERR] specified target $target (file: $src_file) does not contain an active main() definition\n"
+      fi
+    else
+      printf "[ERR] specified target $target not found amoung source files\n"
+    fi
+  done
+}
+
+##########################################################################################################################
+
+find_targets_in_source(){
+  for source in "${SOURCE_FILES[@]}"; do
+      if file_has_main "./$SOURCE_DIR/$source"; then
+        if [ -z "${TARGET_SEEN[$source]:-}" ]; then
+          TARGET_FILES+=("$source")
+          TARGET_SEEN["$source"]=1
+        fi
+      fi
+  done
+}
 
 ##########################################################################################################################
 #The function that makes de the Makefile
-# TODO: allow to choose compiler and options
 # TODO: increase functionality, create debug and production build
-# TODO: Include the option to autodetect source and header files (for makefile updating)
+# TODO: Add actual rules for libraries
 populate_makefile(){
 	#Header of the makefile
 	printf "#@Brief: Autogenerated makefile\n" > $MAKE_NAME
@@ -303,82 +474,96 @@ populate_makefile(){
 
 	#Prints the flags for g++ and the working directories
 	printf "#Options and directories\n" >> $MAKE_NAME
-	printf "CXXFLAGS = -std=c++17 -Wall -g -Ofast\n" >> $MAKE_NAME
+	printf "CXX = $COMP\n" >> $MAKE_NAME
+	printf "CXXFLAGS = $COMP_FLAGS\n" >> $MAKE_NAME
 
   #printf "PROJECT_DIR = %s\n" "$PROJECT_DIR" >> $MAKE_NAME
   printf "SRC_DIR = %s\n" "./$SOURCE_DIR" >> $MAKE_NAME
   printf "HEADER_DIR = %s\n" "./$INCLUDE_DIR" >> $MAKE_NAME
-	printf "OBJ_DIR = ./objects/\n\n" >> $MAKE_NAME
+	printf "OBJ_DIR = ./objects\n" >> $MAKE_NAME
+	printf "BIN_DIR = ./bin\n\n" >> $MAKE_NAME
 
 	#If you are making an executable, then it will print out the target only
 	#If you are making a library, then it will have the .ar or the .so extension
 	printf "#Globals\n" >> $MAKE_NAME
-	if [ $MAKING_LIBRARY -eq 0 ]; then
-		printf "NAME = %s\n" "$targets" >> $MAKE_NAME
-	elif [ "$LIBRARY_TYPE" == "static" ]; then
-		printf "NAME = %s.ar\n" "$targets" >> $MAKE_NAME
-	else
-		printf "NAME = %s.so\n" "$targets" >> $MAKE_NAME
-	fi
-	#Scans the source files and the header files. ONLY ONE EXECUTABLE CAN BE MADE WITH THE BASIC MAKEFILE
-  # TODO: look up for source files
-  #printf 'SOURCES := $(wildcard $(SRC_DIR)*.'"\$(SRCEXTENSION))" >> $MAKE_NAME
-	
-	if [ $ONEFILE_TARGET -eq 0 ]; then
-    # TODO: look up for header files
-    #printf 'HEADERS := $(wildcard $(HEADER_DIR)*.'"\$(INCEXTENSION))" >> $MAKE_NAME
-	fi
-	
-  # TODO: get objects out of the source files
-  #printf 'OBJECTS := $(patsubst $(SRC_DIR)%.'"\$(SRCEXTENSION)"', $(OBJ_DIR)%.o, $(SOURCES))' >> $MAKE_NAME
-	printf "\n\n" >> $MAKE_NAME
-	#Makes the directory where the objects will be stored and makes the executable/library
-	printf 'all: obj $(NAME)\n' >> $MAKE_NAME
-	printf "#Make the directory for the objects\n" >> $MAKE_NAME
-	printf "obj:" >> $MAKE_NAME
-	printf '\t@mkdir -p $(OBJ_DIR)\n' >> $MAKE_NAME
-		
-	if [ $ONEFILE_TARGET -eq 0 ]; then
-		if [ $MAKING_LIBRARY -eq 0 ]; then
-			printf "#Link it all together" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS) $(HEADERS)' >> $MAKE_NAME
-			printf '\tg++ $(CXXFLAGS) $(OBJECTS) -o $(NAME)' >> $MAKE_NAME
-		elif [ "$LIBRARY_TYPE" == "static" ]; then
-			printf "#Make a static library" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS) $(HEADERS)' >> $MAKE_NAME
-			printf '\tar rcs $(NAME).ar $(OBJECTS)' >> $MAKE_NAME
-		else
-			printf "#Make a dynamic library" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS) $(HEADERS)' >> $MAKE_NAME
-			printf '\tg++ -shared -o $(NAME).so $(OBJECTS)' >> $MAKE_NAME
-		fi
+  printf 'NAMES=' >> $MAKE_NAME
 
-		printf "#Compile source code into objects" >> $MAKE_NAME
-		printf '$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp $(HEADERS)' >> $MAKE_NAME
-		printf '\tg++ -c $(CXXFLAGS) -I$(HEADER_DIR) -o $@ $<' >> $MAKE_NAME
-	else
-		if [ $MAKING_LIBRARY -eq 0 ]; then
-			printf "#Link the single file" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS)' >> $MAKE_NAME
-			printf '\tg++ $(CXXFLAGS) $(OBJECTS) -o $(NAME)' >> $MAKE_NAME
-		elif [ "$LIBRARY_TYPE" == "static" ]; then
-			printf "#Make a static library" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS)' >> $MAKE_NAME
-			printf '\tar rcs $(NAME).ar $(OBJECTS)' >> $MAKE_NAME
-		else
-			printf "#Make a dynamic library" >> $MAKE_NAME
-			printf '$(NAME): $(OBJECTS)' >> $MAKE_NAME
-			printf '\tg++ -shared -o $(NAME).so $(OBJECTS)' >> $MAKE_NAME
-		fi
-		printf "#Compile the single file into object" >> $MAKE_NAME
-		printf '$(OBJ_DIR)%.o: $(SRC_DIR)%.'"$SRCEXTENSION" >> $MAKE_NAME
-		printf '\tg++ -c $(CXXFLAGS) -o $@ $<' >> $MAKE_NAME
-	fi
+  local names=()
+  local processed_targets=0
+  local index_current_type=0
+  local current_type="${ORDER_IN_WHICH_TO_BUILD[$index_current_type]}"
+  local remaining_current=${HOW_MANY_TARGETS_ARE_BUILT[$current_type]:-0}
+  for i in "${!TARGET_FILES[@]}"; do 
+    while [ "$i" -ge $(( processed_targets + remaining_current )) ]; do  
+      processed_targets=$(( processed_targets + remaining_targets )) #adjusts the base
+      index_current_type=$(( index_current_type + 1 ))
+      current_type="${ORDER_IN_WHICH_TO_BUILD[$index_current_type]}"
+      remaining_current=${HOW_MANY_TARGETS_ARE_BUILT[$current_type]:-0}
+    done 
+    
+    local target_base="${TARGET_FILES[$i]%.*}"
+    local suf=""
+    case "$current_type" in 
+      static) suf=".ar" ;;
+      dynamic) suf=".so" ;;
+      binary) suf="" ;;
+      *) suf="" ;;
+    esac
+    names+=("${target_base}${suf}")
+
+  done
+  for name in "${names[@]}"; do 
+    printf ' %s' "$name" >> $MAKE_NAME
+  done
+  printf "\n" >> $MAKE_NAME
+  
+  #Get general sources
+  printf "SOURCES_NOT_TARGET :=" >> $MAKE_NAME
+  for src in "${SOURCE_FILES_NOT_TARGET[@]}"; do
+    printf " %s" "$src" >> $MAKE_NAME
+  done
+  printf "\n" >> $MAKE_NAME
+  
+  #Get the main files
+  printf "SOURCES_TARGET :=" >> $MAKE_NAME
+  for src in "${TARGET_FILES[@]}"; do 
+    printf " %s" "$src" >> $MAKE_NAME
+  done
+  printf "\n" >> $MAKE_NAME
+
+  #Get the headers
+  printf "HEADERS :=" >> $MAKE_NAME
+  for src in "${HEADER_FILES[@]}"; do 
+    printf " %s" "$src" >> $MAKE_NAME
+  done
+  printf "\n" >> $MAKE_NAME
+  
+  printf 'SOURCES_NT_PATH := $(addprefix $(SRC_DIR)/,$(SOURCES_NOT_TARGET))\n' >> $MAKE_NAME
+  printf 'SOURCES_TARGET_PATH := $(addprefix $(SRC_DIR)/,$(SOURCES_TARGET))\n' >> $MAKE_NAME
+  printf 'HEADERS_PATH := $(addprefix $(HEADER_DIR)/,$(HEADERS))\n' >> $MAKE_NAME
+  printf 'NAMES_PATH := $(addprefix $(BIN_DIR)/,$(NAMES))\n' >> $MAKE_NAME
+
+  printf 'SOURCES_NT_OBJ := $(patsubst $(SRC_DIR)/%s, $(OBJ_DIR)/%%.o, $(SOURCES_NT_PATH))\n' "%.$SRC_EXTENSION" >> $MAKE_NAME
+  printf 'SOURCES_TARGET_OBJ := $(patsubst $(SRC_DIR)/%s, $(OBJ_DIR)/%%.o, $(SOURCES_TARGET_PATH))\n\n' "%.$SRC_EXTENSION" >> $MAKE_NAME
+
+  printf 'all: dirs $(NAMES_PATH)\n' >> $MAKE_NAME
+	printf "#Make the directory for the objects\n" >> $MAKE_NAME
+	printf "dirs:\n" >> $MAKE_NAME
+  printf '\t@mkdir -p $(OBJ_DIR) $(BIN_DIR)\n\n' >> $MAKE_NAME
+
+  printf "#Link it all together\n" >> $MAKE_NAME
+  printf '$(BIN_DIR)/%%: $(OBJ_DIR)/%%.o $(SOURCES_NT_OBJ)\n' >> $MAKE_NAME
+  printf '\t$(CXX) $(CXXFLAGS) -o $@ $^\n\n' >> $MAKE_NAME
+
+  printf "#Compile source code into objects\n" >> $MAKE_NAME
+  printf '$(OBJ_DIR)/%%.o: $(SRC_DIR)/%s $(HEADERS_PATH)\n' "%.$SRC_EXTENSION" >> $MAKE_NAME
+  printf '\t$(CXX) -c $(CXXFLAGS) -I$(HEADER_DIR) -o $@ $< \n\n' >> $MAKE_NAME
+
 	#auxiliar function
-	printf "#Clean everything" >> $MAKE_NAME
-	printf "clean:" >> $MAKE_NAME
-	printf '\t@rm -rf $(OBJ_DIR) $(NAME)' >> $MAKE_NAME
-	printf ".PHONY: all clean" >> $MAKE_NAME
+	printf "#Clean everything\n" >> $MAKE_NAME
+	printf "clean:\n" >> $MAKE_NAME
+  printf '\t@rm -rf $(OBJ_DIR) $(BIN_DIR)\n\n' >> $MAKE_NAME
+	printf ".PHONY: all clean dirs\n" >> $MAKE_NAME
 }
 ##########################################################################################################################
 
@@ -391,28 +576,30 @@ create_project_directory(){
 
   readonly PROJECT_DIR="$PATH_USED"
 
-  #if the path above exists, then it will starts making the makefile, otherwise, it will be marked as missed if the parameter --force was not specified
-  if [ ! -d "$PROJECT_DIR" ] && [ $FORCE_PROJECT_CREATION -eq 1 ]
-  then
+  if [ -d "$PROJECT_DIR" ]; then 
+    return 0
+  elif [ $FORCE_PROJECT_CREATION -eq 1 ]; then
     mkdir "$PROJECT_DIR"
-    #CREATED_TARGETS=$((CREATED_TARGETS+1))
-    printf "Created the project: $PROJECT_DIR\n"
+    printf "[INFO] Created the project directory: $PROJECT_DIR\n"
+  else 
+    printf "[ERR] Couldn't find the project: $PROJECT_DIR\n"
+    exit 1
   fi
 }
 ##########################################################################################################################
 
 
 ##########################################################################################################################
-create_makefile(){
-  MAKE_NAME="$PROJECT_DIR/Makefile"
+create_or_update_makefile(){
+  MAKE_NAME="./Makefile"
   if [ -f "$MAKE_NAME" ];then
-    printf "Updating makefile $MAKE_NAME...\n"
+    printf "[INFO] Updating makefile $MAKE_NAME...\n"
   else 
-    touch $MAKE_NAME
-    if [ $? -eq 0 ]; then
-      printf "Makefile created successfully\n"
+    if touch "$MAKE_NAME"; then
+      printf "[INFO] Makefile created successfully\n"
     else 
-      printf "Makefile couldn't be created\n"
+      printf "[ERR] Makefile couldn't be created\n"
+      exit 1
     fi 
   fi
 }
@@ -421,19 +608,38 @@ create_makefile(){
 
 ##########################################################################################################################
 create_header_and_source_directories(){
-  if [ ! -d "$PROJECT_DIR/$SOURCE_DIR" ]
+  if [ ! -d "./$SOURCE_DIR" ]
   then
-    mkdir "$PROJECT_DIR/$SOURCE_DIR"
+    mkdir "./$SOURCE_DIR"
     printf "Source directory created\n"
   fi
-  if [ ! -d "$PROJECT_DIR/$INCLUDE_DIR" ] && [ $ONEFILE_TARGET -eq 0 ]
+  if [ ! -d "./$INCLUDE_DIR" ] #&& [ $ONEFILE_TARGET -eq 0 ]
   then
-    mkdir "$PROJECT_DIR/$INCLUDE_DIR"
+    mkdir "./$INCLUDE_DIR"
     printf "Include directory created\n"
   fi
 }
 ##########################################################################################################################
 
+isolate_non_target_sources(){
+  SOURCE_FILES_NOT_TARGET=()
+  for src in ${SOURCE_FILES[@]}; do 
+    if [ -z ${TARGET_SEEN["$src"]:-} ]; then
+      SOURCE_FILES_NOT_TARGET+=("$src")
+    fi
+  done
+}
+
+##########################################################################################################################
+
+get_number_of_binaries(){
+  local num_targets=${#TARGET_FILES[@]}
+  local num_static=${HOW_MANY_TARGETS_ARE_BUILT["static"]:-0}
+  local num_dynamic=${HOW_MANY_TARGETS_ARE_BUILT["dynamic"]:-0}
+  HOW_MANY_TARGETS_ARE_BUILT["binary"]=$(( num_targets - num_static - num_dynamic ))
+}
+
+##########################################################################################################################
 # TODO: Add dependency checking for builds
 verify_parameters $@
 #shift the parameters according to its use in the verify_parameters function
@@ -442,8 +648,21 @@ shift "$PARAMS_USED"
 create_project_directory
 
 if [ -d "$PROJECT_DIR" ];then
-  create_makefile
+  cd "$PROJECT_DIR"
+  create_or_update_makefile
   create_header_and_source_directories
+  find_sources_headers
+  
+  #did the user add target files? if not, then try to find files with the
+  #main function
+  if [ $# -eq 0 ]; then
+    find_targets_in_source
+  else 
+    add_proposed_targets $@
+  fi
+  get_number_of_binaries
+
+  isolate_non_target_sources
   populate_makefile
 fi
 #c'est finni!
