@@ -39,7 +39,7 @@ I guess I will enable this if there is any activity
 <h3 align="center">Scripts</h3>
 
   <p align="center">
-    A place where I will post scripts that I have made that I might find interesting to share!
+    A place where I will post scripts that I have made and that I find interesting to share!
     <br />
     <a href="https://github.com/JavierNIS/Scripts"><strong>Explore the docs: »</strong></a>
     <br />
@@ -88,9 +88,9 @@ I guess I will enable this if there is any activity
 The idea behind this repository is to publish scripts I have been making and uptdating. Some scripts are made out of curiosity, I just think about a potential use for a bash script and then I try to implement it. Other scripts are made out of necessity, sometimes, I want to make a process automatic and I make a simple script, said script then gets refactored and I try to make it usable for more situations. At the end, I have a some scripts that I want to share with the world, in case someone finds them useful!
 
 What are the principles that I am following?:
-* Modularity: I will try to break my projects into smaller functions, right now there isn't a lot to work with, but when I find it useful, I will try to combine common functions into libraries.
-* Portability: I will try to keep the number of files needed for the usage of a script as small as possible, the best scenario will be to use only one or two files. Also, I will try to make POSIX compliant scripts.
-* Readability: Documentation is an important part of the scripts, I will try to add as many explanations as I redeem necessary. This is also implied for the coding, I am not a script expert, but I will try to make code as readable as possible.
+* Modularity: Most scripts aim to be a single file, but parts of the code will be refactored into functions in order to keep it readable. 
+* Portability: I will try to keep the number of files needed for the usage of a script as small as possible, the best scenario will be to use only one file. Also, I will try to make POSIX compliant scripts.
+* Readability: Documentation is an important part of the scripts, I will try to add as many explanations as I consider necessary. This is also implied for the coding, I am not a script expert, but I will try to make code as readable as possible.
 * INCLUDE YOUR OWN: This is a space to share your own bash code, if you have something that you find interesting then feel free to include it, also, feel free to criticise my work and propose ways to improve it, this is a place that promotes learning and improvement.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -102,7 +102,7 @@ What are the principles that I am following?:
 * <a href="https://www.gnu.org/software/bash/"><img src="images/terminal_bash.png" height="20" width="20"></a>
 
 >[!NOTE]
->You can use any scripting language, I will use bash, but I plan on learning others as time goes on. Other scripting languages will be added as they get used.
+>You can use any scripting language, but for my scripts I use bash and I plan on using python or lua. Other scripting languages will be added as they get used.
 
 ### List of scripts
 <!-- A humble start -->
@@ -119,7 +119,7 @@ What are the principles that I am following?:
 <!-- GETTING STARTED -->
 ## Getting Started
 
-At the moment, due to the simplicity of the directory, you don't need to do a lot, there are no prerequesites.
+At the moment, due to the simplicity of the directory, you don't need to do a lot, there are no prerequesites as everything used is built-in.
 <!--
 ### Prerequisites
 
@@ -155,21 +155,23 @@ This space will show you some examples on the usage of the scripts that will be 
   </a>
 </div>
 
-If you want to create multiple projects from the ground (targetn doesn't exist in the current path) use this command.
 
->./Making_Makefiles --force target1 target2 target3 ... targetn
+Now this script allows the creation of one makefile, said makefile might build multiple targets (which can be binaries, libraries and such).
+To specify the binary, do:
 
-Do you want to make a dynamic library out of a single templated source file? Use this command.
+>./Making_Makefiles target1 target2 target3 ... targetn
 
->./Making_Makefiles -SX tpp --single --library=dynamic target ... targetn
+Do you want to make one or multiple dynamic libraries out of templated files? Include the following!
 
-Make a static library that has header files with the hpp extension and templated source files.
+>./Making_Makefiles -SX tpp --dynamic <number of dynamic libraries> ... \[target ... targetn\]
 
->./Making_Makefiles -ISX hpp tpp --library=static target1 target2 ... targetn
+Make a static library that has header files with the hpp extension and source files with the extension cc.
 
-The makefile made will use ./targetn/inc as the include path for the header files.
+>./Making_Makefiles -ISX cc tpp --static <number of static libraries> ... \[target1 target2 ... targetn\]
 
->./Making_Makefiles -I inc target1 target2 ... targetn
+The makefile made will use ./directory/inc as the include path for the header files.
+
+>./Making_Makefiles -I inc
 
 You can combine most commands, for more help, use the the command
 
@@ -183,11 +185,12 @@ You can combine most commands, for more help, use the the command
 ## Roadmap
 
 ### Making_Makefiles
+- [ ] Allow debug and production build
+- [ ] Improve target main() detection to avoid false positives with strings
+- [ ] Allow multiple source and header extensions
+- [ ] Add simple dependecy checking
 
-- [x] {IMMEDIATE} Fix potential bugs.
-- [ ] Migrate to python. 
-
-This script is really big, adding more functionality would make it confusing.
+Even though the script is bigger than before, it is still manageable, the idea is to avoid using major dependencies and to keep it all in a single file.
 
 See the [open issues](https://github.com/JavierNIS/Scripts/issues) for a full list of proposed features (and known issues).
 
@@ -216,7 +219,7 @@ Don't forget to give the project a star! Thanks again!
 <!-- LICENSE -->
 ## License
 
-This README is distributed under the MIT License. See `LICENSE.txt` for more information. The whole repository is also governed unde this License
+This README is distributed under the MIT License. See `LICENSE.txt` for more information. The whole repository is also governed under this License
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
