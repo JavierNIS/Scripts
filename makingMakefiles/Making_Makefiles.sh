@@ -567,7 +567,7 @@ populate_makefile(){
     all_final_targets+=('$(STATIC_PATH)')
   fi
   
-  if (( ${#names_dynamicc[@]} > 0 )); then
+  if (( ${#names_dynamic[@]} > 0 )); then
     printf 'DYNAMIC_LIBS=' >> $MAKE_NAME
     for name in "${names_dynamic[@]}"; do 
       printf ' %s' "$name" >> $MAKE_NAME
